@@ -6,10 +6,7 @@ import java.awt.image.BufferedImage;
 import com.kingyu.rlbird.util.Constant;
 import com.kingyu.rlbird.util.GameUtil;
 
-/**
- *
- * @author Kingyu
- */
+
 public class Ground {
 
 	private static final BufferedImage BackgroundImg;
@@ -34,7 +31,7 @@ public class Ground {
 			return;
 		}
 		int imgWidth = BackgroundImg.getWidth();
-		int count = Constant.FRAME_WIDTH / imgWidth + 2; // 根据窗口宽度得到图片的绘制次数
+		int count = Constant.FRAME_WIDTH / imgWidth + 2;
 		for (int i = 0; i < count; i++) {
 			g.drawImage(BackgroundImg, imgWidth * i - layerX, Constant.FRAME_HEIGHT - GROUND_HEIGHT, null);
 		}

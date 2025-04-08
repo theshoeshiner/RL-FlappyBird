@@ -2,18 +2,13 @@ package com.kingyu.rlbird.util;
 
 import java.awt.Color;
 
-/**
- * 常量类
- *
- * @author Kingyu 后续优化可写入数据库或文件中，便于修改
- */
 
 public class Constant {
-    // 窗口尺寸
+
     public static final int FRAME_WIDTH = 288;
     public static final int FRAME_HEIGHT = 512;
 
-    // 游戏标题
+
     public static final String GAME_TITLE = "RL Flappy Bird written by Kingyu";
 
     // 窗口位置
@@ -35,6 +30,9 @@ public class Constant {
     // 小鸟动作
     public static final int[] DO_NOTHING = {1, 0};
     public static final int[] FLAP = {0, 1};
+
+    //public static final int DO_NOTHING = 0;
+    //public static final int FLAP = 1;
 
     // 图像资源路径
     public static final String BG_IMG_PATH = "src/main/resources/img/background.png";

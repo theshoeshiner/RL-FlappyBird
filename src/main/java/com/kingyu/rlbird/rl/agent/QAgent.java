@@ -1,11 +1,8 @@
 package com.kingyu.rlbird.rl.agent;
 
-import ai.djl.ndarray.NDArrays;
-import ai.djl.ndarray.NDManager;
-import com.kingyu.rlbird.rl.ActionSpace;
-import com.kingyu.rlbird.rl.env.RlEnv;
-import com.kingyu.rlbird.rl.env.RlEnv.Step;
+import ai.djl.modality.rl.agent.RlAgent;
 import ai.djl.ndarray.NDArray;
+import ai.djl.ndarray.NDArrays;
 import ai.djl.ndarray.NDList;
 import ai.djl.training.GradientCollector;
 import ai.djl.training.Trainer;
@@ -13,7 +10,6 @@ import ai.djl.training.listener.TrainingListener.BatchData;
 import ai.djl.translate.Batchifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 
 import java.util.Arrays;
 import java.util.concurrent.ConcurrentHashMap;
@@ -31,10 +27,23 @@ import java.util.concurrent.ConcurrentHashMap;
  * It is also a good introduction to the field. However, many better techniques are commonly used
  * now.
  */
-public class QAgent implements RlAgent {
+public class QAgent extends ai.djl.modality.rl.agent.QAgent {
 
+    private static final Logger logger = LoggerFactory.getLogger(QAgent.class);
     private final Trainer trainer;
     private final float rewardDiscount;
+    // This batchifier makes the super.chooseAgent method functionally equivalent to the pre-upgrade code
+    private final static Batchifier batchifier = new Batchifier() {
+        @Override
+        public NDList batchify(NDList[] inputs) {
+            return new NDList(inputs[0].get(0));
+        }
+
+        @Override
+        public NDList[] unbatchify(NDList inputs) {
+            return new NDList[0];
+        }
+    };
 
     /**
      * Constructs a {@link ai.djl.modality.rl.agent.QAgent} with a custom {@link Batchifier}.
@@ -43,41 +52,61 @@ public class QAgent implements RlAgent {
      * @param rewardDiscount the reward discount to apply to rewards from future states
      */
     public QAgent(Trainer trainer, float rewardDiscount) {
+        super(trainer, rewardDiscount,batchifier );
         this.trainer = trainer;
         this.rewardDiscount = rewardDiscount;
+
     }
 
-    private static final Logger logger = LoggerFactory.getLogger(QAgent.class);
-
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public NDList chooseAction(RlEnv env, boolean training) {
-        ActionSpace actionSpace = env.getActionSpace();
-        NDArray actionReward = trainer.evaluate(env.getObservation()).singletonOrThrow().get(0);
-        logger.info(Arrays.toString(actionReward.toFloatArray()));
-        int bestAction = Math.toIntExact(actionReward.argMax().getLong());
-        return actionSpace.get(bestAction);
-    }
+    public void trainBatch(ai.djl.modality.rl.env.RlEnv.Step[] batchSteps) {
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void trainBatch(Step[] batchSteps) {
-        BatchData batchData =
+       /* BatchData batchData =
                 new BatchData(null, new ConcurrentHashMap<>(), new ConcurrentHashMap<>());
+        for (RlEnv.Step step : batchSteps) {
 
-        // temporary manager for attaching NDArray to reduce the gpu memory usage
-        NDManager temporaryManager = NDManager.newBaseManager();
+            NDList[] preInput = buildInputs(step.getPreObservation(), Collections.singletonList(step.getAction()));
+
+
+            NDList[] postInputs = buildInputs(step.getPostObservation(), step.getPostActionSpace());
+
+            NDList[] allInputs =
+                    Stream.concat(Arrays.stream(preInput), Arrays.stream(postInputs))
+                            .toArray(NDList[]::new);
+
+            try (GradientCollector collector = trainer.newGradientCollector()) {
+                NDArray results =
+                        trainer.forward(batchifier.batchify(allInputs))
+                                .singletonOrThrow()
+                                .squeeze(-1);
+                NDList preQ = new NDList(results.get(0));
+                NDList postQ;
+                if (step.isDone()) {
+                    postQ = new NDList(step.getReward());
+                } else {
+                    NDArray bestAction = results.get("1:").max();
+                    postQ = new NDList(bestAction.mul(rewardDiscount).add(step.getReward()));
+                }
+                NDArray lossValue = trainer.getLoss().evaluate(postQ, preQ);
+                collector.backward(lossValue);
+                batchData.getLabels().put(postQ.get(0).getDevice(), postQ);
+                batchData.getPredictions().put(preQ.get(0).getDevice(), preQ);
+            }
+        }
+
+        trainer.notifyListeners(listener -> listener.onTrainingBatch(trainer, batchData));*/
+
+
+        // Working
+
+        BatchData batchData = new BatchData(null, new ConcurrentHashMap<>(), new ConcurrentHashMap<>());
 
         NDList preObservationBatch = new NDList();
-        Arrays.stream(batchSteps).forEach(step -> preObservationBatch.addAll(step.getPreObservation(temporaryManager)));
+        Arrays.stream(batchSteps).forEach(step -> preObservationBatch.addAll(step.getPreObservation()));
         NDList preInput = new NDList(NDArrays.concat(preObservationBatch, 0));
 
         NDList postObservationBatch = new NDList();
-        Arrays.stream(batchSteps).forEach(step -> postObservationBatch.addAll(step.getPostObservation(temporaryManager)));
+        Arrays.stream(batchSteps).forEach(step -> postObservationBatch.addAll(step.getPostObservation()));
         NDList postInput = new NDList(NDArrays.concat(postObservationBatch, 0));
 
         NDList actionBatch = new NDList();
@@ -89,38 +118,38 @@ public class QAgent implements RlAgent {
         NDList rewardInput = new NDList(NDArrays.stack(rewardBatch, 0));
 
         try (GradientCollector collector = trainer.newGradientCollector()) {
-            NDList QReward = trainer.forward(preInput);
-            NDList targetQReward = trainer.forward(postInput);
 
-            NDList Q = new NDList(QReward.singletonOrThrow()
+            NDList preResults = trainer.forward(preInput);
+            NDList postResults = trainer.forward(postInput);
+
+            NDList preQ = new NDList(preResults.singletonOrThrow()
                     .mul(actionInput.singletonOrThrow())
                     .sum(new int[]{1}));
 
-            NDArray[] targetQValue = new NDArray[batchSteps.length];
+            NDArray[] postQ = new NDArray[batchSteps.length];
             for (int i = 0; i < batchSteps.length; i++) {
-                if (batchSteps[i].isTerminal()) {
-                    targetQValue[i] = batchSteps[i].getReward();
+                if (batchSteps[i].isDone()) {
+                    postQ[i] = batchSteps[i].getReward();
                 } else {
-                    targetQValue[i] = targetQReward.singletonOrThrow().get(i)
+                    postQ[i] = postResults.singletonOrThrow().get(i)
                             .max()
                             .mul(rewardDiscount)
                             .add(rewardInput.singletonOrThrow().get(i));
                 }
             }
             NDList targetQBatch = new NDList();
-            Arrays.stream(targetQValue).forEach(value -> targetQBatch.addAll(new NDList(value)));
+            Arrays.stream(postQ).forEach(value -> targetQBatch.addAll(new NDList(value)));
             NDList targetQ = new NDList(NDArrays.stack(targetQBatch, 0));
 
-            NDArray lossValue = trainer.getLoss().evaluate(targetQ, Q);
+            NDArray lossValue = trainer.getLoss().evaluate(targetQ, preQ);
             collector.backward(lossValue);
             batchData.getLabels().put(targetQ.singletonOrThrow().getDevice(), targetQ);
-            batchData.getPredictions().put(Q.singletonOrThrow().getDevice(), Q);
-            this.trainer.step();
+            batchData.getPredictions().put(preQ.singletonOrThrow().getDevice(), preQ);
         }
-        for (Step step : batchSteps) {
-            step.getPreObservation().attach(step.getManager());
-            step.getPostObservation().attach(step.getManager());
-        }
-        temporaryManager.close();  // close the temporary manager
+
+        // broken for old code
+        //trainer.notifyListeners(listener -> listener.onTrainingBatch(trainer, batchData));
+
     }
+
 }

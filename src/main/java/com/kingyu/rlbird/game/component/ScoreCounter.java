@@ -2,26 +2,19 @@ package com.kingyu.rlbird.game.component;
 
 import com.kingyu.rlbird.game.FlappyBird;
 
-/**
- * 记分类, 单例类
- *
- * @author Kingyu
- */
+
 public class ScoreCounter {
-    private static final ScoreCounter scoreCounter = new ScoreCounter();
 
     private long score = 0;
+    private final FlappyBird game;
 
-    private ScoreCounter() {
+    public ScoreCounter(FlappyBird game) {
+        this.game = game;
     }
 
-    public static ScoreCounter getInstance() {
-        return scoreCounter;
-    }
-
-    public void score(Bird bird) {
-        if (!bird.isDead()) {
-            FlappyBird.setCurrentReward(1f);
+    public void score() {
+        if (!game.getBird().isDead()) {
+            game.setCurrentReward(1f);
             score += 1;
         }
     }

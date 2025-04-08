@@ -7,25 +7,19 @@ import com.kingyu.rlbird.game.FlappyBird;
 import com.kingyu.rlbird.util.Constant;
 import com.kingyu.rlbird.util.GameUtil;
 
-/**
- * 小鸟类，小鸟的绘制与飞行逻辑都在此类
- *
- * @author Kingyu
- */
+
 public class Bird {
     private final int x;
     private int y;
 
-    // 小鸟的状态
     private int birdState;
     public static final int BIRD_READY = 0;
     public static final int BIRD_FALL = 1;
     public static final int BIRD_DEAD = 2;
 
     private final Rectangle birdCollisionRect;
-    public static final int RECT_DESCALE = 2; // 碰撞矩形宽高的补偿参数
+    public static final int RECT_DESCALE = 2;
 
-    private final ScoreCounter scoreCounter;
     static BufferedImage birdImages;
 
     public static final int BIRD_WIDTH;
@@ -38,15 +32,18 @@ public class Bird {
         BIRD_HEIGHT = birdImages.getHeight();
     }
 
-    public Bird() {
-        scoreCounter = ScoreCounter.getInstance();
+    final FlappyBird game;
+
+    public Bird(FlappyBird game) {
+        this.game = game;
+
         x = Constant.FRAME_WIDTH >> 2;
         y = Constant.FRAME_HEIGHT >> 1;
 
         int rectX = x - (BIRD_WIDTH >> 1);
         int rectY = y - (BIRD_HEIGHT >> 1) + RECT_DESCALE * 2;
         birdCollisionRect = new Rectangle(rectX + RECT_DESCALE, rectY + RECT_DESCALE * 2, BIRD_WIDTH - RECT_DESCALE * 3,
-                BIRD_HEIGHT - RECT_DESCALE * 4); // 碰撞矩形的坐标与小鸟相同
+                BIRD_HEIGHT - RECT_DESCALE * 4);
     }
 
     public void draw(Graphics g) {
@@ -74,7 +71,7 @@ public class Bird {
         birdCollisionRect.y = birdCollisionRect.y - velocity;
         if (birdCollisionRect.y < GameElementLayer.MIN_HEIGHT ||
                 birdCollisionRect.y > GameElementLayer.MAX_HEIGHT + GameElementLayer.VERTICAL_INTERVAL) {
-            FlappyBird.setCurrentReward(0.1f);
+            game.setCurrentReward(0.1f);
         }
         if (birdCollisionRect.y < Constant.WINDOW_BAR_HEIGHT) {
             die();
@@ -91,9 +88,8 @@ public class Bird {
     }
 
     public void die() {
-        FlappyBird.setCurrentReward(-1f);
-        FlappyBird.setCurrentTerminal(true);
-        FlappyBird.setGameState(FlappyBird.GAME_OVER);
+        game.setCurrentReward(-1);
+        game.setCurrentTerminal(true);
         birdState = BIRD_DEAD;
     }
 
@@ -107,11 +103,7 @@ public class Bird {
         velocity = 0;
         int ImgHeight = birdImages.getHeight();
         birdCollisionRect.y = y + RECT_DESCALE * 4 - ImgHeight / 2;
-        scoreCounter.reset();
-    }
-
-    public long getCurrentScore() {
-        return scoreCounter.getCurrentScore();
+        game.getScoreCounter().reset();
     }
 
     public int getBirdX() {
