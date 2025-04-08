@@ -42,7 +42,7 @@ public final class TrainBird {
 
     public static final int EXPLORE = 3_000_000; // frames over which to anneal epsilon og was 3_000_000
     public static final int SAVE_EVERY_STEPS = 100_000; // save model every 100,000 step
-    public static final int REPLAY_BUFFER_SIZE = 10_000; // number of previous transitions to remember TODO DCW Org version was 50k
+    public static final int REPLAY_BUFFER_SIZE = 20_000; // number of previous transitions to remember TODO DCW Org version was 50k
     public static final float REWARD_DISCOUNT = 0.9f; // decay rate of past observations
     public static final String PARAMS_PREFIX = "dqn-trained";
 
@@ -52,6 +52,7 @@ public final class TrainBird {
 
     public static int INPUT_FRAMES = 4;
     public static int SCREEN_SIZE = 80;
+    public static int BATCH_SIZE = 64;
 
     private TrainBird() {}
 
@@ -90,19 +91,27 @@ public final class TrainBird {
     }
 
     public static void train(Arguments arguments, Model model) {
+
+        logger.info("REWARD_DISCOUNT: {}",REWARD_DISCOUNT);
+        logger.info("INITIAL_EPSILON: {}",INITIAL_EPSILON);
+        logger.info("FINAL_EPSILON: {}",FINAL_EPSILON);
+        logger.info("REPLAY_BUFFER_SIZE: {}",REPLAY_BUFFER_SIZE);
+        logger.info("BATCH_SIZE: {}",BATCH_SIZE);
+
+
+
         boolean withGraphics = arguments.withGraphics();
-        int batchSize = arguments.getBatchSize();  // size of mini batch
-        long start = System.currentTimeMillis();
+
 
         NDManager gameManager = NDManager.newBaseManager();
 
-        FlappyBird game = new FlappyBird(gameManager, batchSize, REPLAY_BUFFER_SIZE, withGraphics);
+        FlappyBird game = new FlappyBird(gameManager, BATCH_SIZE, REPLAY_BUFFER_SIZE, withGraphics);
 
 
         DefaultTrainingConfig config = setupTrainingConfig();
         Trainer trainer = model.newTrainer(config);
 
-        trainer.initialize(new Shape(batchSize, INPUT_FRAMES, 80, 80));
+        trainer.initialize(new Shape(BATCH_SIZE, INPUT_FRAMES, 80, 80));
 
        /* trainer.initialize(
                 new Shape(batchSize, INPUT_FRAMES, SCREEN_SIZE, SCREEN_SIZE), // state in,
@@ -123,6 +132,8 @@ public final class TrainBird {
 
         int reportMod = 100;
         int scale = 3;
+        long reportStart = System.currentTimeMillis();
+        long reportSteps = 0;
 
         DescriptiveStatistics score = new DescriptiveStatistics(reportMod);
         DescriptiveStatistics steps = new DescriptiveStatistics(reportMod);
@@ -139,7 +150,7 @@ public final class TrainBird {
             int batchSteps = 0;
 
             // Make sure we generate at least enough steps to cover the last processed batch
-            while(batchSteps < batchSize) {
+            while(batchSteps < BATCH_SIZE) {
 
                 float result = game.runEnvironment(agent, true); // runs game until a terminal step, training is assumed to be true
                 int gameSteps = game.getGameStep();
@@ -151,6 +162,7 @@ public final class TrainBird {
                 stepsTotal.addValue(game.gameStep);
 
                 totalSteps += game.gameStep;
+                reportSteps += game.gameStep;
                 if (!replayBufferFull && totalSteps > REPLAY_BUFFER_SIZE) {
                     replayBufferFull = true;
                     birdTrainer.start();
@@ -158,18 +170,19 @@ public final class TrainBird {
                 }
 
                 if (games % reportMod == 0) {
-                    long dur = System.currentTimeMillis() - start;
+                    long dur = System.currentTimeMillis() - reportStart;
 
                     logger.info("GAME: {} TOTAL-STEPS: {} ", games, totalSteps);
-                    logger.info("RATE: {} steps/s {} games/s", (totalSteps * 1000L) / dur,(games * 1000L) / dur);
+                    logger.info("RATE: {} steps/s {} games/s", (reportSteps * 1000L) / dur,(reportMod * 1000L) / dur);
 
                     logger.info("ARRAYS {}", gameManager.getManagedArrays().size());
-                    logger.info("{} WINDOW REPORT", reportMod);
-                    logger.info("MAX-SCORE: {} MED-SCORE: {} MEAN-SCORE: {}",(int)score.getMax(), MathUtils.round(score.getPercentile(50),scale), MathUtils.round(score.getMean(),scale));
-                    logger.info("MAX-STEPS: {} MED-STEPS: {} MEAN-STEPS: {}", (int)steps.getMax() ,MathUtils.round(steps.getPercentile(50),scale), MathUtils.round(steps.getMean(),scale));
-                    logger.info("TOTAL REPORT");
-                    logger.info("MAX-SCORE: {} MAX-STEPS: {}",(int)scoreTotal.getMax(), (int)stepsTotal.getMax());
+                    logger.info("WINMX REPORT --> MAX-SCORE: {} MAX-STEPS: {}", (int)score.getMax(),(int)steps.getMax());
+                    logger.info("WINMD REPORT --> MED-SCORE: {} MED-STEPS: {}",  MathUtils.round(score.getPercentile(50),scale), MathUtils.round(steps.getPercentile(50),scale));
+                    logger.info("WINMN REPORT --> MEN-SCORE: {} MEN-STEPS: {}",  MathUtils.round(score.getMean(),scale), MathUtils.round(steps.getMean(),scale));
+                    logger.info("TOTAL REPORT --> MAX-SCORE: {} MAX-STEPS: {}",(int)scoreTotal.getMax(), (int)stepsTotal.getMax());
 
+                    reportStart = System.currentTimeMillis();
+                    reportSteps = 0;
                 }
 
                 games++;
