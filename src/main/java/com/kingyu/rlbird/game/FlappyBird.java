@@ -23,9 +23,11 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Queue;
 
-import static com.kingyu.rlbird.ai.TrainBird.INPUT_FRAMES;
+import static com.kingyu.rlbird.ai.Main.INPUT_FRAMES;
 import static com.kingyu.rlbird.util.Constant.FPS;
 import static com.kingyu.rlbird.util.Constant.FRAME_HEIGHT;
 import static com.kingyu.rlbird.util.Constant.FRAME_WIDTH;
@@ -45,6 +47,11 @@ public class FlappyBird extends Frame implements RlEnv {
     private final boolean withGraphics;
 
     public final NDManager manager;
+
+    public ReplayBuffer getReplayBuffer() {
+        return replayBuffer;
+    }
+
     private final ReplayBuffer replayBuffer;
     public BufferedImage currentImg;
 
@@ -53,14 +60,19 @@ public class FlappyBird extends Frame implements RlEnv {
     public float currentReward = startReward;
 
     public int globalStep = 0;
-    public int gameStep = 0;
+    private int gameStep = 0;
 
     // These frames have independent managers since they are used across many steps
     public final Queue<NDArray> frameQueue = new ArrayDeque<>(INPUT_FRAMES);
 
     private FlappyBirdStep currentStep;
     private FlappyBirdStep lastStep;
+    private List<FlappyBirdStep> gameSteps = new ArrayList<>();
 
+
+    public NDManager getManager() {
+        return manager;
+    }
 
     public FlappyBird(NDManager manager, int batchSize, int replayBufferSize, boolean withGraphics) {
         this.manager = manager;
@@ -92,6 +104,7 @@ public class FlappyBird extends Frame implements RlEnv {
     }
 
 
+
     @Override
     public ai.djl.modality.rl.env.RlEnv.Step step(NDList action, boolean training) {
 
@@ -114,24 +127,35 @@ public class FlappyBird extends Frame implements RlEnv {
 
 
         FlappyBirdStep step = new FlappyBirdStep(this,stepManager, action, lastStep);
-        if (training) {
+
+/*     if (training) {
             // This will close old steps automatically, so we sync on replay buffer to ensure that no steps are returned while we are deciding what to close
             synchronized (replayBuffer) {
                 replayBuffer.addStep(step);
             }
-        }
+        }*/
 
         currentStep = step;
 
         globalStep++;
         gameStep++;
 
+
+        gameSteps.add(step);
         return step;
     }
 
     @Override
     public float runEnvironment(RlAgent agent, boolean training) {
-        return RlEnv.super.runEnvironment(agent, training);
+        float reward =  RlEnv.super.runEnvironment(agent, training);
+        if(training) {
+            // add steps all at once to the buffer
+            synchronized (replayBuffer) {
+                gameSteps.stream().forEach(replayBuffer::addStep);
+                gameSteps.clear();
+            }
+        }
+        return reward;
     }
 
     @Override
@@ -147,7 +171,7 @@ public class FlappyBird extends Frame implements RlEnv {
 
     @Override
     public ai.djl.modality.rl.env.RlEnv.Step[] getBatch() {
-       return replayBuffer.getBatch();
+        return replayBuffer.getBatch();
     }
 
 

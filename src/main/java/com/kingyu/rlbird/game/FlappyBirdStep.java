@@ -25,6 +25,7 @@ public final class FlappyBirdStep implements ai.djl.modality.rl.env.RlEnv.Step {
     private final ActionSpace actionSpace;
     private final NDList preObservation;
     private final NDList action;
+    private boolean canClose = false;
 
 
     FlappyBirdStep(FlappyBird game, NDManager postStateManager, NDList action, FlappyBirdStep lastStep) {
@@ -87,6 +88,13 @@ public final class FlappyBirdStep implements ai.djl.modality.rl.env.RlEnv.Step {
 
     @Override
     public void close() {
+        //this.canClose = true;
         this.manager.close(); // Closes the manager that contains the current observation
+    }
+
+    public void checkClose() {
+        if(canClose) {
+            this.manager.close();
+        }
     }
 }

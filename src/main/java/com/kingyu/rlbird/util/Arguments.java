@@ -18,7 +18,8 @@ public class Arguments {
             batchSize = 32;
         }
 
-        preTrained = cmd.hasOption("pre-trained");
+        //preTrained = cmd.hasOption("pre-trained");
+        preTrained = true;
 
         testing = cmd.hasOption("testing");
     }

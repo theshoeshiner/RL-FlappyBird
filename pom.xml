@@ -15,7 +15,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>1.7</maven.compiler.source>
         <maven.compiler.target>1.7</maven.compiler.target>
-        <exec.mainClass>com.kingyu.rlbird.ai.TrainBird</exec.mainClass>
+        <exec.mainClass>com.kingyu.rlbird.ai.Main</exec.mainClass>
         <djl.version>0.32.0-SNAPSHOT</djl.version>
     </properties>
 

@@ -147,7 +147,7 @@ public class QAgent extends ai.djl.modality.rl.agent.QAgent {
             batchData.getPredictions().put(preQ.singletonOrThrow().getDevice(), preQ);
         }
 
-        // broken for old code
+        // TODO broken for old code
         //trainer.notifyListeners(listener -> listener.onTrainingBatch(trainer, batchData));
 
     }

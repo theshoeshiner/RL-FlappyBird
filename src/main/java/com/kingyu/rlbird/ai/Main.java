@@ -1,9 +1,7 @@
 package com.kingyu.rlbird.ai;
 
-import ai.djl.Device;
 import ai.djl.MalformedModelException;
 import ai.djl.Model;
-import ai.djl.engine.Engine;
 import ai.djl.modality.rl.agent.EpsilonGreedy;
 import ai.djl.modality.rl.agent.RlAgent;
 import ai.djl.ndarray.NDManager;
@@ -18,6 +16,7 @@ import ai.djl.training.DefaultTrainingConfig;
 import ai.djl.training.Trainer;
 import ai.djl.training.evaluator.Accuracy;
 import ai.djl.training.initializer.NormalInitializer;
+import ai.djl.training.listener.SaveModelTrainingListener;
 import ai.djl.training.listener.TrainingListener;
 import ai.djl.training.loss.Loss;
 import ai.djl.training.optimizer.Adam;
@@ -29,51 +28,53 @@ import com.kingyu.rlbird.util.Arguments;
 import com.kingyu.rlbird.util.Constant;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.math.stat.descriptive.DescriptiveStatistics;
-import org.apache.commons.math.util.MathUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Paths;
 
-public final class TrainBird {
+public final class Main {
 
-    private static final Logger logger = LoggerFactory.getLogger(TrainBird.class);
+    private static final Logger logger = LoggerFactory.getLogger(Main.class);
 
-    public static final int EXPLORE = 3_000_000; // frames over which to anneal epsilon og was 3_000_000
-    public static final int SAVE_EVERY_STEPS = 100_000; // save model every 100,000 step
-    public static final int REPLAY_BUFFER_SIZE = 20_000; // number of previous transitions to remember TODO DCW Org version was 50k
+    //public static final int EXPLORE = 3_000_000; // frames over which to anneal epsilon og was 3_000_000
+    //public static final int STEPS_PER_EPISODE = 3_000_000; // frames over which to anneal epsilon og was 3_000_000
+    public static final int SAVE_EVERY_STEPS = 100; // save model every 1,000 epochs
+    public static final int REPLAY_BUFFER_SIZE = 5_000; // number of previous transitions to remember TODO DCW Org version was 50k
     public static final float REWARD_DISCOUNT = 0.9f; // decay rate of past observations
-    public static final String PARAMS_PREFIX = "dqn-trained";
+    //public static final String PARAMS_PREFIX = "dqn-trained";
 
     public static final float INITIAL_EPSILON = 0.01f; //0.01
     public static final float FINAL_EPSILON = 0.0001f; // 0.0001
 
 
+
     public static int INPUT_FRAMES = 4;
     public static int SCREEN_SIZE = 80;
-    public static int BATCH_SIZE = 64;
+    public static int BATCH_SIZE = 32;
+    public static String modelNamePrefix;
 
-    private TrainBird() {}
+    private Main() {}
 
     public static void main(String[] args) throws ParseException, IOException, MalformedModelException {
-
-        System.out.println(Device.cpu());
-        System.out.println(Device.gpu());
-        System.out.println(Device.gpu(1));
-
-        System.out.println("GPU count: " + Engine.getInstance().getGpuCount());
-        Device d = Device.gpu(1);
 
         try {
 
             Arguments arguments = Arguments.parseArgs(args);
+
+            //public FlappyBirdTrainer(int inputFrames, int batchSize, int bufferSize, float startEpsilon, float endEpsilon, float rewardDiscount) {
+            FlappyBirdTrainer trainer = new FlappyBirdTrainer(INPUT_FRAMES, BATCH_SIZE, REPLAY_BUFFER_SIZE, INITIAL_EPSILON, FINAL_EPSILON, REWARD_DISCOUNT, arguments.usePreTrained(), arguments.withGraphics(), arguments.isTesting());
+
+            trainer.run();
+          /*  modelNamePrefix = "dqn-replay_" +REPLAY_BUFFER_SIZE+"-batch_"+BATCH_SIZE;
+
             Model model = createOrLoadModel(arguments);
             if (arguments.isTesting()) {
                 test(model);
             } else {
                 train(arguments, model);
-            }
+            }*/
 
         }
         catch(Exception e){
@@ -81,16 +82,24 @@ public final class TrainBird {
         }
     }
 
-    public static Model createOrLoadModel(Arguments arguments) throws IOException, MalformedModelException {
+  /*  public static Model createOrLoadModel(Arguments arguments) throws MalformedModelException {
         Model model = Model.newInstance("QNetwork");
+
         model.setBlock(getBlock());
         if (arguments.usePreTrained()) {
-            model.load(Paths.get(Constant.MODEL_PATH), PARAMS_PREFIX);
+            logger.info("loading model: {}",modelNamePrefix);
+            try {
+                model.load(Paths.get(Constant.MODEL_PATH), modelNamePrefix);
+                logger.info("loaded model at epoch {}",model.getProperty("Epoch"));
+            } catch (IOException ignored) {
+            }
+
+
         }
         return model;
-    }
+    }*/
 
-    public static void train(Arguments arguments, Model model) {
+    /*public static void train(Arguments arguments, Model model) {
 
         logger.info("REWARD_DISCOUNT: {}",REWARD_DISCOUNT);
         logger.info("INITIAL_EPSILON: {}",INITIAL_EPSILON);
@@ -113,19 +122,22 @@ public final class TrainBird {
 
         trainer.initialize(new Shape(BATCH_SIZE, INPUT_FRAMES, 80, 80));
 
-       /* trainer.initialize(
+       *//* trainer.initialize(
                 new Shape(batchSize, INPUT_FRAMES, SCREEN_SIZE, SCREEN_SIZE), // state in,
                 //new Shape(batchSize), // action space?
                 new Shape(batchSize, 2) // action - flap or dont
 
-        );*/
-        trainer.notifyListeners(listener -> listener.onTrainingBegin(trainer));
+        );*//*
+
+
+        QAgent a;
+
 
         RlAgent agent = new QAgent(trainer, REWARD_DISCOUNT);
         Tracker exploreRate =
                 LinearTracker.builder()
                         .setBaseValue(INITIAL_EPSILON)
-                        .optSlope(-(INITIAL_EPSILON - FINAL_EPSILON) / EXPLORE)
+                        .optSlope(-(INITIAL_EPSILON - FINAL_EPSILON) / TrainerThread.TRAIN_STEPS)
                         .optMinValue(FINAL_EPSILON)
                         .build();
         agent = new EpsilonGreedy(agent, exploreRate);
@@ -141,11 +153,28 @@ public final class TrainBird {
         DescriptiveStatistics stepsTotal = new DescriptiveStatistics();
 
         long totalSteps = 0;
-        BirdTrainer birdTrainer = new BirdTrainer(agent,trainer,game);
+        TrainerThread trainerThread = new TrainerThread(model,agent,trainer,game);
         boolean replayBufferFull = false;
-        int games = 0;
+        int games = 0; // game == episode
 
-        training: while(true) {
+        GameThread gameThread = new GameThread(agent,trainer,model,game, trainerThread);
+
+        gameThread.start();
+
+
+
+        while(gameThread.isAlive()) {
+            try {
+                Thread.sleep(10000);
+                //logger.info("still waiting...");
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        logger.info("Game thread was done, ending main thread");
+
+        *//*training: while(true) {
 
             int batchSteps = 0;
 
@@ -190,19 +219,23 @@ public final class TrainBird {
             }
 
             if(replayBufferFull) {
-                birdTrainer.runEpoch();
-                if (birdTrainer.getEpoch() > EXPLORE) {
+                birdTrainer.runBatch();
+                if (birdTrainer.getBatch() > EXPLORE) {
                     logger.info("train thread was done, terminating game thread");
                     break training;
                 }
+
+
+
             }
 
         }
 
         trainer.notifyListeners(listener -> listener.onTrainingEnd(trainer));
+*//*
+    }*/
 
-    }
-
+/*
     public static void test(Model model) {
         FlappyBird game = new FlappyBird(NDManager.newBaseManager(), 1, 1, true);
         DefaultTrainingConfig config = setupTrainingConfig();
@@ -213,9 +246,10 @@ public final class TrainBird {
             }
         }
     }
+*/
 
 
-    public static SequentialBlock getBlock() {
+    /*public static SequentialBlock getBlock() {
         // conv -> conv -> conv -> fc -> fc
         return new SequentialBlock()
                 .add(Conv2d.builder()
@@ -249,11 +283,17 @@ public final class TrainBird {
     }
 
     public static DefaultTrainingConfig setupTrainingConfig() {
-        return new DefaultTrainingConfig(Loss.l2Loss())
+        DefaultTrainingConfig config = new DefaultTrainingConfig(Loss.l2Loss())
                 .addTrainingListeners(TrainingListener.Defaults.basic())
                 .optOptimizer(Adam.builder().optLearningRateTracker(Tracker.fixed(1e-6f)).build())
                 .addEvaluator(new Accuracy())
                 .optInitializer(new NormalInitializer(), Parameter.Type.WEIGHT)
                 ;
-    }
+        SaveModelTrainingListener saveModelTrainingListener = new SaveModelTrainingListener(Paths.get(Constant.MODEL_PATH).toString(),modelNamePrefix,SAVE_EVERY_STEPS);
+        saveModelTrainingListener.setSaveModelCallback(trainer -> {
+            logger.info("saving model with epoch: {}",trainer.getModel().getProperty("Epoch"));
+        });
+        config.addTrainingListeners(saveModelTrainingListener);
+        return config;
+    }*/
 }

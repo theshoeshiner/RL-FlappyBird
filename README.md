@@ -26,17 +26,17 @@ mvn compile
 
 The following command will start to train without graphics:
 ```
-mvn exec:java -Dexec.mainClass="com.kingyu.rlbird.ai.TrainBird"
+mvn exec:java -Dexec.mainClass="com.kingyu.rlbird.ai.Main"
 ```
 
 The above command will train from scratch. You can also try to train with the pretrained weight:
 ```
-mvn exec:java -Dexec.mainClass="com.kingyu.rlbird.ai.TrainBird" -Dexec.args="-p"
+mvn exec:java -Dexec.mainClass="com.kingyu.rlbird.ai.Main" -Dexec.args="-p"
 ```
 
 To test with the model directly, you can do the followings
 ```
-mvn exec:java -Dexec.mainClass="com.kingyu.rlbird.ai.TrainBird" -Dexec.args="-p -t"  
+mvn exec:java -Dexec.mainClass="com.kingyu.rlbird.ai.Main" -Dexec.args="-p -t"  
 ```
 
 | Argument   | Comments                                 |

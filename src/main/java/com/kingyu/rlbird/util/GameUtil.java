@@ -5,7 +5,7 @@ import ai.djl.modality.cv.ImageFactory;
 import ai.djl.modality.cv.util.NDImageUtils;
 import ai.djl.ndarray.NDArray;
 import ai.djl.ndarray.NDManager;
-import com.kingyu.rlbird.ai.TrainBird;
+import com.kingyu.rlbird.ai.Main;
 
 import java.awt.image.BufferedImage;
 import java.io.FileInputStream;
@@ -38,6 +38,6 @@ public class GameUtil {
         return NDImageUtils.toTensor(
                 NDImageUtils.resize(
                         ImageFactory.getInstance().fromImage(observation).toNDArray(manager, Image.Flag.GRAYSCALE)
-                        , TrainBird.SCREEN_SIZE,TrainBird.SCREEN_SIZE));
+                        , Main.SCREEN_SIZE, Main.SCREEN_SIZE));
     }
 }
